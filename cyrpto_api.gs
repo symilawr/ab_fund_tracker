@@ -2,19 +2,19 @@ function runAllDataFetchFunctions() {
   var createDate = new Date();
   var timeout = 300000; // 5 minutes
 
-  // Fetch wallet data
-  if (new Date().getTime() - createDate.getTime() < timeout) {
-    fetchWalletData(createDate);
-  }
+  // // Fetch Zapper data
+  // if (new Date().getTime() - createDate.getTime() < timeout) {
+  //   fetchZapperData(createDate);
+  // }
 
+  // // Fetch wallet data
+  // if (new Date().getTime() - createDate.getTime() < timeout) {
+  //   fetchWalletData(createDate);
+  // }
+  
   // Fetch Mobula transaction data
   if (new Date().getTime() - createDate.getTime() < timeout) {
     fetchMobulaTransactionData(createDate);
-  }
-
-  // Fetch Zapper data
-  if (new Date().getTime() - createDate.getTime() < timeout) {
-    fetchZapperData(createDate);
   }
 }
 
@@ -370,11 +370,11 @@ function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, table
       Logger.log(`Error details for ${sheetName}: ` + JSON.stringify(jobStatus.status.errors));
       throw new Error(`Job failed for ${sheetName}: ` + jobStatus.status.errorResult.message);
     } else {
-      Logger.log(`Job completed successfully for ${sheetName}.`);
+      const outputRows = jobStatus.statistics.load.outputRows;
+      Logger.log(`Job completed successfully for ${sheetName}. Number of records inserted: ${outputRows}`);
     }
   }
 }
-
 
 function authorize() {
   const ui = SpreadsheetApp.getUi();
@@ -387,6 +387,7 @@ function onOpen() {
     .addItem('Authorize', 'authorize')
     .addToUi();
 }
+
 
 
 
