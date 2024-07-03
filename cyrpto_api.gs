@@ -1,7 +1,3 @@
-function isValidEthereumAddress(address) {
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
-}
-
 function runAllDataFetchFunctions() {
   var createDate = new Date();
   var timeout = 300000; // 5 minutes
@@ -11,10 +7,10 @@ function runAllDataFetchFunctions() {
     fetchWalletData(createDate);
   }
 
-  // // Fetch Mobula transaction data
-  // if (new Date().getTime() - createDate.getTime() < timeout) {
-  //   fetchMobulaTransactionData(createDate);
-  // }
+  // Fetch Mobula transaction data
+  if (new Date().getTime() - createDate.getTime() < timeout) {
+    fetchMobulaTransactionData(createDate);
+  }
 
   // Fetch Zapper data
   if (new Date().getTime() - createDate.getTime() < timeout) {
@@ -183,20 +179,6 @@ function fetchLatestTimestamps() {
   }
 }
 
-function getLastTimestamp(sheet, walletAddress) {
-  var data = sheet.getDataRange().getValues();
-  var lastTimestamp = null;
-  for (var i = 1; i < data.length; i++) { // Start from 1 to skip headers
-    if (data[i][0] === walletAddress) {
-      var timestamp = new Date(data[i][1]).getTime();
-      if (!lastTimestamp || timestamp > lastTimestamp) {
-        lastTimestamp = timestamp;
-      }
-    }
-  }
-  return lastTimestamp;
-}
-
 function fetchWalletData(createDate) {
   var walletSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallets");
   var walletDataSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallet_Data") ||
@@ -218,14 +200,14 @@ function fetchWalletData(createDate) {
   // Set headers if the sheets are empty
   if (walletDataSheet.getLastRow() === 0) {
     walletDataSheet.appendRow([
-      'Wallet', 'Total_Wallet_Balance', 'Total_Realized_PnL', 'Total_Unrealized_PnL', 'Asset_Count',
+      'Wallet_Address', 'Total_Wallet_Balance', 'Total_Realized_PnL', 'Total_Unrealized_PnL', 'Asset_Count',
       '24h_Realized_PnL', '24h_Unrealized_PnL', '7d_Realized_PnL', '7d_Unrealized_PnL',
       '30d_Realized_PnL', '30d_Unrealized_PnL', '1y_Realized_PnL', '1y_Unrealized_PnL', 'Create_Date'
     ]);
   }
   if (walletAssetsSheet.getLastRow() === 0) {
     walletAssetsSheet.appendRow([
-      'Wallet', 'Asset_Name', 'Asset_Symbol', 'Asset_ID', 'Realized_PnL', 'Unrealized_PnL',
+      'Wallet_Address', 'Asset_Name', 'Asset_Symbol', 'Asset_ID', 'Realized_PnL', 'Unrealized_PnL',
       'Allocation', 'Price', 'Price_Bought', 'Price_Change_24h', 'Price_Change_1h', 'Total_Invested',
       'Min_Buy_Price', 'Max_Buy_Price', 'Estimated_Balance', 'Token_Balance', 'Create_Date'
     ]);
@@ -338,20 +320,13 @@ function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, table
 
   for (let i = 1; i < data.length; i++) {
     const row = {};
-    let isRowValid = true;
 
     for (let j = 0; j < headers.length; j++) {
-      if (data[i][j] === '' || data[i][j] === null) {
-        Logger.log(`Missing data in row ${i + 1}, column ${headers[j]}`);
-        isRowValid = false;
-        break;
-      }
-      row[headers[j]] = data[i][j];
+      // If the data is missing, insert null
+      row[headers[j]] = data[i][j] === '' || data[i][j] === null ? null : data[i][j];
     }
 
-    if (isRowValid) {
-      rows.push(row);
-    }
+    rows.push(row);
   }
 
   Logger.log(`Prepared rows for BigQuery (${sheetName}): ` + JSON.stringify(rows));
@@ -400,6 +375,7 @@ function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, table
   }
 }
 
+
 function authorize() {
   const ui = SpreadsheetApp.getUi();
   ui.alert('This is just to trigger the authorization flow.');
@@ -411,6 +387,7 @@ function onOpen() {
     .addItem('Authorize', 'authorize')
     .addToUi();
 }
+
 
 
 function fetchZapperData(createDate) {
@@ -486,4 +463,8 @@ function fetchZapperData(createDate) {
       Logger.log("Exception: " + e.message);
     }
   });
+}
+
+function isValidEthereumAddress(address) {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
