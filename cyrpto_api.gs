@@ -11,10 +11,10 @@ function runAllDataFetchFunctions() {
     fetchWalletData(createDate);
   }
 
-  // Fetch Mobula transaction data
-  if (new Date().getTime() - createDate.getTime() < timeout) {
-    fetchMobulaTransactionData(createDate);
-  }
+  // // Fetch Mobula transaction data
+  // if (new Date().getTime() - createDate.getTime() < timeout) {
+  //   fetchMobulaTransactionData(createDate);
+  // }
 
   // Fetch Zapper data
   if (new Date().getTime() - createDate.getTime() < timeout) {
@@ -315,6 +315,12 @@ function pushToBigQuery() {
     // Move Transactions to gbq table transactions
     moveSheetToBigQuery(spreadsheet, 'Transactions', PROJECT_ID, DATASET_ID, 'transactions');
     
+    // Move Zapper_Wallet_Data to gbq table zapper_wallet_data
+    moveSheetToBigQuery(spreadsheet, 'Zapper_Wallet_Data', PROJECT_ID, DATASET_ID, 'zapper_wallet_data');
+    
+    // Move Zapper_Wallet_Assets to gbq table zapper_wallet_assets
+    moveSheetToBigQuery(spreadsheet, 'Zapper_Wallet_Assets', PROJECT_ID, DATASET_ID, 'zapper_wallet_assets');
+    
   } catch (error) {
     Logger.log('Error: ' + JSON.stringify(error));
     throw new Error('Failed to push data to BigQuery: ' + JSON.stringify(error));
@@ -332,10 +338,20 @@ function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, table
 
   for (let i = 1; i < data.length; i++) {
     const row = {};
+    let isRowValid = true;
+
     for (let j = 0; j < headers.length; j++) {
+      if (data[i][j] === '' || data[i][j] === null) {
+        Logger.log(`Missing data in row ${i + 1}, column ${headers[j]}`);
+        isRowValid = false;
+        break;
+      }
       row[headers[j]] = data[i][j];
     }
-    rows.push(row);
+
+    if (isRowValid) {
+      rows.push(row);
+    }
   }
 
   Logger.log(`Prepared rows for BigQuery (${sheetName}): ` + JSON.stringify(rows));
@@ -396,13 +412,14 @@ function onOpen() {
     .addToUi();
 }
 
+
 function fetchZapperData(createDate) {
   var walletSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallets");
-  var walletDataSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallet_Data2") ||
-                        SpreadsheetApp.getActiveSpreadsheet().insertSheet("Wallet_Data2");
-  var walletAssetsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallet_Assets2") ||
-                          SpreadsheetApp.getActiveSpreadsheet().insertSheet("Wallet_Assets2");
-  var apiKey = '397f3301-24c7-4316-8d7c-cd6f92639c0a'; // Hardcoded API key for demonstration. Replace with actual key from the sheet if necessary.
+  var zapperWalletDataSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Zapper_Wallet_Data") ||
+                              SpreadsheetApp.getActiveSpreadsheet().insertSheet("Zapper_Wallet_Data");
+  var zapperWalletAssetsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Zapper_Wallet_Assets") ||
+                                SpreadsheetApp.getActiveSpreadsheet().insertSheet("Zapper_Wallet_Assets");
+  var apiKey = 'YzMyNWU5OWItNzU0ZC00ZmVjLTg1M2QtZjMxOTU2YWNiN2ViOg=='; // Hardcoded API key for demonstration. Replace with actual key from the sheet if necessary.
 
   var walletAddresses = walletSheet.getRange("A2:A")
                                    .getValues()
@@ -412,61 +429,61 @@ function fetchZapperData(createDate) {
 
   if (!createDate) {
     createDate = new Date();
-  }  
-  
-  var apiUrl = `https://api.zapper.xyz/v2/balances/tokens?addresses%5B%5D=${walletAddresses}`;
-  var options = {
-    "method": "get",
-    "headers": {
-      "Authorization": `Basic ${apiKey}`,
-      "accept": "*/*"
-    },
-    "muteHttpExceptions": true
-  };
-  try {
-    var response = UrlFetchApp.fetch(apiUrl, options);
-    var responseCode = response.getResponseCode();
-    if (responseCode == 200) {
-      var data = JSON.parse(response.getContentText());
-      var balances = data[walletAddresses.toLowerCase()]; // Ensure the correct wallet address format
-      if (balances && balances.length > 0) {
-        // Clear existing data
-        walletDataSheet.clear();
-        // Set headers
-        walletDataSheet.appendRow([
-          'Key', 'Network', 'Updated At', 'Token ID', 'Token Name', 'Token Symbol',
-          'Token Updated At', 'Token Created At', 'Token Price', 'Token Status',
-          'Token Market Cap', 'Token Price Updated At', 'Token Balance',
-          'Token Balance USD', 'Token Balance Raw'
-        ]);
-        // Extract and insert data
-        balances.forEach(function(item) {
-          var token = item.token;
-          walletDataSheet.appendRow([
-            item.key,
-            item.network,
-            item.updatedAt,
-            token.id,
-            token.name,
-            token.symbol,
-            token.updatedAt,
-            token.createdAt,
-            token.price,
-            token.status,
-            token.marketCap,
-            token.priceUpdatedAt,
-            token.balance,
-            token.balanceUSD,
-            token.balanceRaw
-          ]);
-        });
-      } else {
-        Logger.log("No balances found for the specified wallet address.");
-      }
-    } else {
-      Logger.log("Error: " + responseCode + " - " + response.getContentText());
-    }
-  } catch (e) {
-    Logger.log("Exception: " + e.message);
   }
+
+  // Clear existing data if it hasn't been cleared already
+  if (zapperWalletDataSheet.getLastRow() === 0) {
+    zapperWalletDataSheet.clear();
+    zapperWalletDataSheet.appendRow(['Wallet_Address', 'Updated_At', 'Balance_USD', 'Asset_Count', 'Create_Date']);
+  }
+  if (zapperWalletAssetsSheet.getLastRow() === 0) {
+    zapperWalletAssetsSheet.clear();
+    zapperWalletAssetsSheet.appendRow([
+      'Wallet_Address', 'Updated_At', 'Token_Address',
+      'Token_Symbol', 'Token_Decimals', 'Token_Price', 'Token_Balance', 'Token_Balance_USD', 'Create_Date'
+    ]);
+  }
+
+  walletAddresses.forEach(function(walletAddress) {
+    var apiUrl = `https://api.zapper.xyz/v2/balances/tokens?addresses%5B%5D=${walletAddress.toLowerCase()}`;
+    var options = {
+      "method": "get",
+      "headers": {
+        "Authorization": `Basic ${apiKey}`,
+        "accept": "*/*"
+      },
+      "muteHttpExceptions": true
+    };
+    try {
+      var response = UrlFetchApp.fetch(apiUrl, options);
+      var responseCode = response.getResponseCode();
+      if (responseCode == 200) {
+        var data = JSON.parse(response.getContentText());
+        Logger.log("API Response: " + JSON.stringify(data)); // Log the entire response for debugging
+        var balanceData = data[walletAddress.toLowerCase()];
+
+        if (balanceData && balanceData.length > 0) {
+          // Calculate asset count
+          var assetCount = balanceData.length;
+          zapperWalletDataSheet.appendRow([walletAddress, balanceData[0].updatedAt, balanceData[0].token.balanceUSD, assetCount, createDate]);
+
+          // Append wallet assets data
+          balanceData.forEach(function(balanceItem) {
+            var token = balanceItem.token;
+            zapperWalletAssetsSheet.appendRow([
+              walletAddress, balanceItem.updatedAt, token.address,
+              token.symbol, token.decimals, token.price, token.balance, token.balanceUSD, createDate
+            ]);
+          });
+
+        } else {
+          Logger.log("No balances found for the specified wallet address: " + walletAddress);
+        }
+      } else {
+        Logger.log("Error: " + responseCode + " - " + response.getContentText());
+      }
+    } catch (e) {
+      Logger.log("Exception: " + e.message);
+    }
+  });
 }
