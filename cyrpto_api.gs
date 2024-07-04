@@ -2,15 +2,15 @@ function runAllDataFetchFunctions() {
   var createDate = new Date();
   var timeout = 300000; // 5 minutes
 
-  // // Fetch Zapper data
-  // if (new Date().getTime() - createDate.getTime() < timeout) {
-  //   fetchZapperData(createDate);
-  // }
+  // Fetch Zapper data
+  if (new Date().getTime() - createDate.getTime() < timeout) {
+    fetchZapperData(createDate);
+  }
 
-  // // Fetch wallet data
-  // if (new Date().getTime() - createDate.getTime() < timeout) {
-  //   fetchWalletData(createDate);
-  // }
+  // Fetch wallet data
+  if (new Date().getTime() - createDate.getTime() < timeout) {
+    fetchWalletData(createDate);
+  }
   
   // Fetch Mobula transaction data
   if (new Date().getTime() - createDate.getTime() < timeout) {
@@ -19,7 +19,7 @@ function runAllDataFetchFunctions() {
 }
 
 function fetchMobulaTransactionData(createDate) {
-  const API_KEY = '397f3301-24c7-4316-8d7c-cd6f92639c0a';
+  const API_KEY = getEnvironmentVariable('MOBULA_API_KEY');
   const walletSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallets");
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions") ||
                 SpreadsheetApp.getActiveSpreadsheet().insertSheet("Transactions");
@@ -121,8 +121,8 @@ function fetchMobulaTransactionData(createDate) {
 }
 
 function fetchLatestTimestamps() {
-  const PROJECT_ID = 'optimum-courier-426820-m4';
-  const DATASET_ID = 'ab_crypto';
+  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
   const TABLE_ID = 'transactions';
   const QUERY = `
     SELECT
@@ -185,7 +185,7 @@ function fetchWalletData(createDate) {
                         SpreadsheetApp.getActiveSpreadsheet().insertSheet("Wallet_Data");
   var walletAssetsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallet_Assets") ||
                           SpreadsheetApp.getActiveSpreadsheet().insertSheet("Wallet_Assets");
-  var apiKey = '397f3301-24c7-4316-8d7c-cd6f92639c0a'; // Hardcoded API key for demonstration. Replace with actual key from the sheet if necessary.
+  var apiKey = getEnvironmentVariable('MOBULA_API_KEY'); // Hardcoded API key for demonstration. Replace with actual key from the sheet if necessary.
 
   var walletAddresses = walletSheet.getRange("A2:A")
                                    .getValues()
@@ -196,7 +196,7 @@ function fetchWalletData(createDate) {
   if (!createDate) {
     createDate = new Date();
   }  
-  
+
   // Set headers if the sheets are empty
   if (walletDataSheet.getLastRow() === 0) {
     walletDataSheet.appendRow([
@@ -216,7 +216,7 @@ function fetchWalletData(createDate) {
   for (var i = 0; i < walletAddresses.length; i++) {
     var walletAddress = walletAddresses[i];
     var apiUrl = `https://api.mobula.io/api/1/wallet/portfolio?wallet=${walletAddress}`;
-    
+
     var options = {
       'headers': {
         'Authorization': `Bearer ${apiKey}`
@@ -280,29 +280,29 @@ function fetchWalletData(createDate) {
 }
 
 function pushToBigQuery() {
-  const PROJECT_ID = 'optimum-courier-426820-m4';
-  const DATASET_ID = 'ab_crypto';
-  
+  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
+
   const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE'; // Replace with your actual spreadsheet ID
-  
+
   try {
     const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-    
+
     // Move Wallet_Data to gbq table wallet_data
     moveSheetToBigQuery(spreadsheet, 'Wallet_Data', PROJECT_ID, DATASET_ID, 'wallet_data');
-    
+
     // Move Wallet_Assets to gbq table wallet_assets
     moveSheetToBigQuery(spreadsheet, 'Wallet_Assets', PROJECT_ID, DATASET_ID, 'wallet_assets');
-    
+
     // Move Transactions to gbq table transactions
     moveSheetToBigQuery(spreadsheet, 'Transactions', PROJECT_ID, DATASET_ID, 'transactions');
-    
+
     // Move Zapper_Wallet_Data to gbq table zapper_wallet_data
     moveSheetToBigQuery(spreadsheet, 'Zapper_Wallet_Data', PROJECT_ID, DATASET_ID, 'zapper_wallet_data');
-    
+
     // Move Zapper_Wallet_Assets to gbq table zapper_wallet_assets
     moveSheetToBigQuery(spreadsheet, 'Zapper_Wallet_Assets', PROJECT_ID, DATASET_ID, 'zapper_wallet_assets');
-    
+
   } catch (error) {
     Logger.log('Error: ' + JSON.stringify(error));
     throw new Error('Failed to push data to BigQuery: ' + JSON.stringify(error));
@@ -388,16 +388,13 @@ function onOpen() {
     .addToUi();
 }
 
-
-
-
 function fetchZapperData(createDate) {
   var walletSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallets");
   var zapperWalletDataSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Zapper_Wallet_Data") ||
                               SpreadsheetApp.getActiveSpreadsheet().insertSheet("Zapper_Wallet_Data");
   var zapperWalletAssetsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Zapper_Wallet_Assets") ||
                                 SpreadsheetApp.getActiveSpreadsheet().insertSheet("Zapper_Wallet_Assets");
-  var apiKey = 'YzMyNWU5OWItNzU0ZC00ZmVjLTg1M2QtZjMxOTU2YWNiN2ViOg=='; // Hardcoded API key for demonstration. Replace with actual key from the sheet if necessary.
+  const API_KEY = getEnvironmentVariable('ZAPPER_API_KEY');
 
   var walletAddresses = walletSheet.getRange("A2:A")
                                    .getValues()
@@ -427,7 +424,7 @@ function fetchZapperData(createDate) {
     var options = {
       "method": "get",
       "headers": {
-        "Authorization": `Basic ${apiKey}`,
+        "Authorization": `Basic ${API_KEY}`,
         "accept": "*/*"
       },
       "muteHttpExceptions": true
