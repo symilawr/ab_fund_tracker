@@ -11,7 +11,7 @@ function runAllDataFetchFunctions() {
   if (new Date().getTime() - createDate.getTime() < timeout) {
     fetchWalletData(createDate);
   }
-  
+
   // Fetch Mobula transaction data
   if (new Date().getTime() - createDate.getTime() < timeout) {
     fetchMobulaTransactionData(createDate);
@@ -43,7 +43,7 @@ function fetchMobulaTransactionData(createDate) {
     ]);
   }
 
-  const latestTimestamps = fetchLatestTimestamps(); // Fetch latest timestamps for each wallet and asset
+  const latestTimestamp = fetchLatestTimestamps('transactions');
 
   for (let i = 0; i < walletAddresses.length; i++) {
     const walletAddress = walletAddresses[i];
@@ -64,6 +64,9 @@ function fetchMobulaTransactionData(createDate) {
 
       try {
         const response = UrlFetchApp.fetch(apiUrl, options);
+        if (response.getResponseCode() !== 200) {
+          throw new Error(`Error: ${response.getResponseCode()} - ${response.getContentText()}`);
+        }
         const data = JSON.parse(response.getContentText());
 
         if (data && data.data && data.data.length > 0) {
@@ -117,65 +120,6 @@ function fetchMobulaTransactionData(createDate) {
         return;
       }
     }
-  }
-}
-
-function fetchLatestTimestamps() {
-  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
-  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
-  const TABLE_ID = 'transactions';
-  const QUERY = `
-    SELECT
-      Wallet_Address,
-      Asset_Symbol,
-      MAX(Timestamp) as Latest_Timestamp
-    FROM
-      \`${PROJECT_ID}.${DATASET_ID}.${TABLE_ID}\`
-    GROUP BY
-      Wallet_Address,
-      Asset_Symbol
-  `;
-
-  const request = {
-    query: QUERY,
-    useLegacySql: false,
-    location: 'US' // Specify the dataset location
-  };
-
-  try {
-    const queryResults = BigQuery.Jobs.query(request, PROJECT_ID);
-    const jobId = queryResults.jobReference.jobId;
-    let job = BigQuery.Jobs.get(PROJECT_ID, jobId);
-
-    while (job.status.state !== 'DONE') {
-      Utilities.sleep(1000);
-      job = BigQuery.Jobs.get(PROJECT_ID, jobId);
-    }
-
-    const rows = job.statistics.query.outputRows > 0 ? BigQuery.Jobs.getQueryResults(PROJECT_ID, jobId).rows : [];
-
-    if (rows && rows.length > 0) {
-      const timestamps = {};
-      rows.forEach(row => {
-        const walletAddress = row.f[0].v;
-        const assetSymbol = row.f[1].v;
-        const latestTimestamp = new Date(row.f[2].v).getTime();
-
-        if (!timestamps[walletAddress]) {
-          timestamps[walletAddress] = {};
-        }
-
-        timestamps[walletAddress][assetSymbol] = latestTimestamp;
-      });
-
-      return timestamps;
-    } else {
-      Logger.log('No data found.');
-      return {};
-    }
-  } catch (e) {
-    Logger.log('Error fetching latest timestamps: ' + e.message);
-    return {};
   }
 }
 
@@ -282,26 +226,13 @@ function fetchWalletData(createDate) {
 function pushToBigQuery() {
   const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
   const DATASET_ID = getEnvironmentVariable('DATASET_ID');
-
   const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE'; // Replace with your actual spreadsheet ID
 
   try {
     const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
 
-    // Move Wallet_Data to gbq table wallet_data
-    moveSheetToBigQuery(spreadsheet, 'Wallet_Data', PROJECT_ID, DATASET_ID, 'wallet_data');
-
-    // Move Wallet_Assets to gbq table wallet_assets
-    moveSheetToBigQuery(spreadsheet, 'Wallet_Assets', PROJECT_ID, DATASET_ID, 'wallet_assets');
-
-    // Move Transactions to gbq table transactions
-    moveSheetToBigQuery(spreadsheet, 'Transactions', PROJECT_ID, DATASET_ID, 'transactions');
-
-    // Move Zapper_Wallet_Data to gbq table zapper_wallet_data
-    moveSheetToBigQuery(spreadsheet, 'Zapper_Wallet_Data', PROJECT_ID, DATASET_ID, 'zapper_wallet_data');
-
-    // Move Zapper_Wallet_Assets to gbq table zapper_wallet_assets
-    moveSheetToBigQuery(spreadsheet, 'Zapper_Wallet_Assets', PROJECT_ID, DATASET_ID, 'zapper_wallet_assets');
+    // Move ETH Prices to gbq table eth_prices
+    moveSheetToBigQuery(spreadsheet, 'ETH Prices', PROJECT_ID, DATASET_ID, 'eth_prices');
 
   } catch (error) {
     Logger.log('Error: ' + JSON.stringify(error));
@@ -322,8 +253,15 @@ function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, table
     const row = {};
 
     for (let j = 0; j < headers.length; j++) {
+      let cellValue = data[i][j];
+
+      // If the cell is a date object, format it as a string
+      if (Object.prototype.toString.call(cellValue) === '[object Date]') {
+        cellValue = Utilities.formatDate(cellValue, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+      }
+
       // If the data is missing, insert null
-      row[headers[j]] = data[i][j] === '' || data[i][j] === null ? null : data[i][j];
+      row[headers[j]] = cellValue === '' || cellValue === null ? null : cellValue;
     }
 
     rows.push(row);
@@ -376,6 +314,8 @@ function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, table
   }
 }
 
+
+
 function authorize() {
   const ui = SpreadsheetApp.getUi();
   ui.alert('This is just to trigger the authorization flow.');
@@ -395,6 +335,7 @@ function fetchZapperData(createDate) {
   var zapperWalletAssetsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Zapper_Wallet_Assets") ||
                                 SpreadsheetApp.getActiveSpreadsheet().insertSheet("Zapper_Wallet_Assets");
   const API_KEY = getEnvironmentVariable('ZAPPER_API_KEY');
+
 
   var walletAddresses = walletSheet.getRange("A2:A")
                                    .getValues()
@@ -466,3 +407,93 @@ function fetchZapperData(createDate) {
 function isValidEthereumAddress(address) {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
+
+function fetchETHPrices() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("ETH Prices") ||
+                SpreadsheetApp.getActiveSpreadsheet().insertSheet("ETH Prices");
+
+  const latestTimestamp = fetchLatestTimestamps('eth_prices');
+  const fromTimestamp = latestTimestamp ? `&from=${latestTimestamp}` : '';
+  const apiUrl = `https://api.mobula.io/api/1/market/history?asset=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2&blockchain=ethereum${fromTimestamp}`;
+
+  const options = {
+    'method': 'get',
+    'muteHttpExceptions': true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(apiUrl, options);
+    if (response.getResponseCode() !== 200) {
+      throw new Error(`Error: ${response.getResponseCode()} - ${response.getContentText()}`);
+    }
+    const data = JSON.parse(response.getContentText());
+
+    // Clear the sheet if it has existing data
+    sheet.clear();
+    sheet.appendRow(['Timestamp', 'Price']);
+
+    // Populate the sheet with data
+    if (data && data.data && data.data.price_history && data.data.price_history.length > 0) {
+      data.data.price_history.forEach(priceData => {
+        sheet.appendRow([
+          new Date(priceData[0]),
+          priceData[1]
+        ]);
+      });
+    } else {
+      Logger.log("No price data found.");
+    }
+
+  } catch (e) {
+    Logger.log(`Exception: ${e.message}`);
+  }
+}
+
+function fetchLatestTimestamps(tableId) {
+  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
+  const QUERY = `
+    SELECT
+      MAX(Timestamp) as Latest_Timestamp
+    FROM
+      \`${PROJECT_ID}.${DATASET_ID}.${tableId}\`
+  `;
+  Logger.log("Executing query: " + QUERY);
+  const request = {
+    query: QUERY,
+    useLegacySql: false,
+    location: 'US' // Specify the dataset location
+  };
+
+  try {
+    const queryResults = BigQuery.Jobs.query(request, PROJECT_ID);
+    Logger.log("Query results: " + JSON.stringify(queryResults));
+    const jobId = queryResults.jobReference.jobId;
+    let job = BigQuery.Jobs.get(PROJECT_ID, jobId);
+
+    while (job.status.state !== 'DONE') {
+      Utilities.sleep(1000);
+      job = BigQuery.Jobs.get(PROJECT_ID, jobId);
+    }
+
+    Logger.log(`Job status: ${job.status.state}`);
+    Logger.log(`Job statistics: ${JSON.stringify(job.statistics)}`);
+
+    const rows = BigQuery.Jobs.getQueryResults(PROJECT_ID, jobId).rows;
+    Logger.log(`Query results: ${JSON.stringify(rows)}`);
+
+    if (rows && rows.length > 0) {
+      // Convert the scientific notation to a number and then to a Date object
+      const latestTimestamp = parseFloat(rows[0].f[0].v) * 1000; // Multiply by 1000 to convert to milliseconds
+      Logger.log(`Latest timestamp: ${latestTimestamp}`);
+      return latestTimestamp;
+    } else {
+      Logger.log('No data found.');
+      return null;
+    }
+  } catch (e) {
+    Logger.log('Error fetching latest timestamps: ' + e.message);
+    return null;
+  }
+}
+
