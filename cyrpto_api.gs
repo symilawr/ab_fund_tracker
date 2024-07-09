@@ -12,10 +12,10 @@ function runAllDataFetchFunctions() {
     fetchWalletData(createDate);
   }
 
-  // Fetch Mobula transaction data
-  if (new Date().getTime() - createDate.getTime() < timeout) {
-    fetchMobulaTransactionData(createDate);
-  }
+  // // Fetch Mobula transaction data
+  // if (new Date().getTime() - createDate.getTime() < timeout) {
+  //   fetchMobulaTransactionData(createDate);
+  // }
 }
 
 function fetchMobulaTransactionData(createDate) {
@@ -34,14 +34,14 @@ function fetchMobulaTransactionData(createDate) {
     createDate = new Date();
   }
 
-  // Set headers if the sheet is empty
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow([
-      'Wallet_Address', 'Timestamp', 'Asset_Name', 'Asset_Symbol', 'Asset_Contract', 'Asset_Logo', 
-      'Type', 'Method_ID', 'Hash', 'Blockchain', 'Amount', 'Amount_USD', 
-      'To', 'From', 'Block_Number', 'Tx_Cost', 'Create_Date'
-    ]);
-  }
+  // Clear existing data
+  sheet.clear();
+  // Set headers
+  sheet.appendRow([
+    'Wallet_Address', 'Timestamp', 'Asset_Name', 'Asset_Symbol', 'Asset_Contract', 'Asset_Logo', 
+    'Type', 'Method_ID', 'Hash', 'Blockchain', 'Amount', 'Amount_USD', 
+    'To', 'From', 'Block_Number', 'Tx_Cost', 'Create_Date'
+  ]);
 
   const latestTimestamp = fetchLatestTimestamps('transactions');
 
@@ -123,13 +123,14 @@ function fetchMobulaTransactionData(createDate) {
   }
 }
 
+
 function fetchWalletData(createDate) {
   var walletSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallets");
   var walletDataSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallet_Data") ||
                         SpreadsheetApp.getActiveSpreadsheet().insertSheet("Wallet_Data");
   var walletAssetsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallet_Assets") ||
                           SpreadsheetApp.getActiveSpreadsheet().insertSheet("Wallet_Assets");
-  var apiKey = getEnvironmentVariable('MOBULA_API_KEY'); // Hardcoded API key for demonstration. Replace with actual key from the sheet if necessary.
+  var apiKey = getEnvironmentVariable('MOBULA_API_KEY');
 
   var walletAddresses = walletSheet.getRange("A2:A")
                                    .getValues()
@@ -141,21 +142,21 @@ function fetchWalletData(createDate) {
     createDate = new Date();
   }  
 
-  // Set headers if the sheets are empty
-  if (walletDataSheet.getLastRow() === 0) {
-    walletDataSheet.appendRow([
-      'Wallet_Address', 'Total_Wallet_Balance', 'Total_Realized_PnL', 'Total_Unrealized_PnL', 'Asset_Count',
-      '24h_Realized_PnL', '24h_Unrealized_PnL', '7d_Realized_PnL', '7d_Unrealized_PnL',
-      '30d_Realized_PnL', '30d_Unrealized_PnL', '1y_Realized_PnL', '1y_Unrealized_PnL', 'Create_Date'
-    ]);
-  }
-  if (walletAssetsSheet.getLastRow() === 0) {
-    walletAssetsSheet.appendRow([
-      'Wallet_Address', 'Asset_Name', 'Asset_Symbol', 'Asset_ID', 'Realized_PnL', 'Unrealized_PnL',
-      'Allocation', 'Price', 'Price_Bought', 'Price_Change_24h', 'Price_Change_1h', 'Total_Invested',
-      'Min_Buy_Price', 'Max_Buy_Price', 'Estimated_Balance', 'Token_Balance', 'Create_Date'
-    ]);
-  }
+  // Clear existing data
+  walletDataSheet.clear();
+  walletAssetsSheet.clear();
+
+  // Set headers
+  walletDataSheet.appendRow([
+    'Wallet', 'Total_Wallet_Balance', 'Total_Realized_PnL', 'Total_Unrealized_PnL', 'Asset_Count',
+    '24h_Realized_PnL', '24h_Unrealized_PnL', '7d_Realized_PnL', '7d_Unrealized_PnL',
+    '30d_Realized_PnL', '30d_Unrealized_PnL', '1y_Realized_PnL', '1y_Unrealized_PnL', 'Create_Date'
+  ]);
+  walletAssetsSheet.appendRow([
+    'Wallet', 'Asset_Name', 'Asset_Symbol', 'Asset_ID', 'Realized_PnL', 'Unrealized_PnL',
+    'Allocation', 'Price', 'Price_Bought', 'Price_Change_24h', 'Price_Change_1h', 'Total_Invested',
+    'Min_Buy_Price', 'Max_Buy_Price', 'Estimated_Balance', 'Token_Balance', 'Create_Date'
+  ]);
 
   for (var i = 0; i < walletAddresses.length; i++) {
     var walletAddress = walletAddresses[i];
@@ -223,110 +224,6 @@ function fetchWalletData(createDate) {
   }
 }
 
-function pushToBigQuery() {
-  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
-  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
-  const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE'; // Replace with your actual spreadsheet ID
-
-  try {
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-
-    // Move ETH Prices to gbq table eth_prices
-    moveSheetToBigQuery(spreadsheet, 'ETH Prices', PROJECT_ID, DATASET_ID, 'eth_prices');
-
-  } catch (error) {
-    Logger.log('Error: ' + JSON.stringify(error));
-    throw new Error('Failed to push data to BigQuery: ' + JSON.stringify(error));
-  }
-}
-
-function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, tableId) {
-  const sheet = spreadsheet.getSheetByName(sheetName);
-  const data = sheet.getDataRange().getValues();
-
-  Logger.log(`Data from Google Sheets (${sheetName}): ` + JSON.stringify(data));
-
-  const rows = [];
-  const headers = data[0].map(header => header.replace(/\s+/g, '_')); // Convert headers to use underscores
-
-  for (let i = 1; i < data.length; i++) {
-    const row = {};
-
-    for (let j = 0; j < headers.length; j++) {
-      let cellValue = data[i][j];
-
-      // If the cell is a date object, format it as a string
-      if (Object.prototype.toString.call(cellValue) === '[object Date]') {
-        cellValue = Utilities.formatDate(cellValue, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-      }
-
-      // If the data is missing, insert null
-      row[headers[j]] = cellValue === '' || cellValue === null ? null : cellValue;
-    }
-
-    rows.push(row);
-  }
-
-  Logger.log(`Prepared rows for BigQuery (${sheetName}): ` + JSON.stringify(rows));
-
-  const job = {
-    configuration: {
-      load: {
-        destinationTable: {
-          projectId: projectId,
-          datasetId: datasetId,
-          tableId: tableId
-        },
-        writeDisposition: 'WRITE_TRUNCATE',
-        sourceFormat: 'NEWLINE_DELIMITED_JSON'
-      }
-    }
-  };
-
-  Logger.log(`Job configuration for ${sheetName}: ` + JSON.stringify(job));
-
-  const jsonLines = rows.map(row => JSON.stringify(row)).join('\n');
-
-  Logger.log(`JSON lines for ${sheetName}: ` + jsonLines);
-
-  const blob = Utilities.newBlob(jsonLines, 'application/json');
-  const insertJob = BigQuery.Jobs.insert(job, projectId, blob);
-
-  Logger.log(`Job status for ${sheetName}: ` + insertJob.status.state);
-
-  const jobId = insertJob.jobReference.jobId;
-  let jobStatus = BigQuery.Jobs.get(projectId, jobId);
-  while (jobStatus.status.state === 'RUNNING') {
-    Logger.log(`Job status for ${sheetName}: ` + jobStatus.status.state);
-    Utilities.sleep(1000); // Wait for 1 second before checking again
-    jobStatus = BigQuery.Jobs.get(projectId, jobId);
-  }
-
-  if (jobStatus.status.state === 'DONE') {
-    if (jobStatus.status.errorResult) {
-      Logger.log(`Error for ${sheetName}: ` + jobStatus.status.errorResult.message);
-      Logger.log(`Error details for ${sheetName}: ` + JSON.stringify(jobStatus.status.errors));
-      throw new Error(`Job failed for ${sheetName}: ` + jobStatus.status.errorResult.message);
-    } else {
-      const outputRows = jobStatus.statistics.load.outputRows;
-      Logger.log(`Job completed successfully for ${sheetName}. Number of records inserted: ${outputRows}`);
-    }
-  }
-}
-
-
-
-function authorize() {
-  const ui = SpreadsheetApp.getUi();
-  ui.alert('This is just to trigger the authorization flow.');
-}
-
-function onOpen() {
-  SpreadsheetApp.getUi().createMenu('BigQuery')
-    .addItem('Push to BigQuery', 'pushToBigQuery')
-    .addItem('Authorize', 'authorize')
-    .addToUi();
-}
 
 function fetchZapperData(createDate) {
   var walletSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Wallets");
@@ -335,7 +232,6 @@ function fetchZapperData(createDate) {
   var zapperWalletAssetsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Zapper_Wallet_Assets") ||
                                 SpreadsheetApp.getActiveSpreadsheet().insertSheet("Zapper_Wallet_Assets");
   const API_KEY = getEnvironmentVariable('ZAPPER_API_KEY');
-
 
   var walletAddresses = walletSheet.getRange("A2:A")
                                    .getValues()
@@ -347,18 +243,18 @@ function fetchZapperData(createDate) {
     createDate = new Date();
   }
 
-  // Clear existing data if it hasn't been cleared already
-  if (zapperWalletDataSheet.getLastRow() === 0) {
-    zapperWalletDataSheet.clear();
-    zapperWalletDataSheet.appendRow(['Wallet_Address', 'Updated_At', 'Balance_USD', 'Asset_Count', 'Create_Date']);
-  }
-  if (zapperWalletAssetsSheet.getLastRow() === 0) {
-    zapperWalletAssetsSheet.clear();
-    zapperWalletAssetsSheet.appendRow([
-      'Wallet_Address', 'Updated_At', 'Token_Address',
-      'Token_Symbol', 'Token_Decimals', 'Token_Price', 'Token_Balance', 'Token_Balance_USD', 'Create_Date'
-    ]);
-  }
+  // Clear existing data
+  zapperWalletDataSheet.clear();
+  zapperWalletAssetsSheet.clear();
+
+  // Set headers
+  zapperWalletDataSheet.appendRow(['Wallet_Address', 'Updated_At', 'Balance_USD', 'Asset_Count', 'Create_Date']);
+  zapperWalletAssetsSheet.appendRow([
+    'address', 'network', 'updatedAt', 'token_id', 'token_address', 'token_name', 'token_symbol', 
+    'token_decimals', 'token_coingeckoId', 'token_updatedAt', 'token_createdAt', 'token_price', 
+    'token_networkId', 'token_marketCap', 'token_priceUpdatedAt', 'token_balance', 'token_balanceUSD', 
+    'token_balanceRaw', 'Create_Date'
+  ]);
 
   walletAddresses.forEach(function(walletAddress) {
     var apiUrl = `https://api.zapper.xyz/v2/balances/tokens?addresses%5B%5D=${walletAddress.toLowerCase()}`;
@@ -387,8 +283,10 @@ function fetchZapperData(createDate) {
           balanceData.forEach(function(balanceItem) {
             var token = balanceItem.token;
             zapperWalletAssetsSheet.appendRow([
-              walletAddress, balanceItem.updatedAt, token.address,
-              token.symbol, token.decimals, token.price, token.balance, token.balanceUSD, createDate
+              walletAddress, balanceItem.network, balanceItem.updatedAt, token.id, token.address, token.name, token.symbol, 
+              token.decimals, token.coingeckoId, token.updatedAt, token.createdAt, token.price, 
+              token.networkId, token.marketCap, token.priceUpdatedAt, token.balance, token.balanceUSD, 
+              token.balanceRaw, createDate
             ]);
           });
 
@@ -404,9 +302,7 @@ function fetchZapperData(createDate) {
   });
 }
 
-function isValidEthereumAddress(address) {
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
-}
+
 
 function fetchETHPrices() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("ETH Prices") ||
@@ -497,3 +393,223 @@ function fetchLatestTimestamps(tableId) {
   }
 }
 
+function isValidEthereumAddress(address) {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+function removeDuplicateRows(sheetName) {
+  const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE'; // Replace with your actual spreadsheet ID
+
+  try {
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const sheet = spreadsheet.getSheetByName(sheetName);
+    const data = sheet.getDataRange().getValues();
+
+    Logger.log(`Checking for duplicates in sheet: ${sheetName}`);
+
+    const uniqueRows = [];
+    const rowsToDelete = [];
+
+    data.forEach((row, index) => {
+      const rowString = JSON.stringify(row);
+      if (uniqueRows.includes(rowString)) {
+        rowsToDelete.push(index + 1);
+      } else {
+        uniqueRows.push(rowString);
+      }
+    });
+
+    // Delete rows from bottom to top to avoid row shifting issues
+    rowsToDelete.reverse().forEach(rowIndex => {
+      Logger.log(`Deleting row ${rowIndex} in sheet ${sheetName}`);
+      sheet.deleteRow(rowIndex);
+    });
+
+    Logger.log(`Deleted ${rowsToDelete.length} duplicate rows from ${sheetName}`);
+
+  } catch (error) {
+    Logger.log('Error: ' + JSON.stringify(error));
+    throw new Error('Failed to remove duplicate rows: ' + JSON.stringify(error));
+  }
+}
+
+function fetchTableSchema(projectId, datasetId, tableId) {
+  const table = BigQuery.Tables.get(projectId, datasetId, tableId);
+  return table.schema.fields;
+}
+
+function convertToFloat(value) {
+  return parseFloat(value.toString());
+}
+
+function formatDataAccordingToSchema(data, schema) {
+  const formattedData = [];
+
+  data.forEach(row => {
+    const formattedRow = {};
+    schema.forEach(field => {
+      const fieldName = field.name;
+      const fieldType = field.type;
+      let value = row[fieldName];
+
+      if (fieldType === 'FLOAT' && typeof value === 'string' && value.includes('E')) {
+        value = convertToFloat(value);
+      }
+
+      formattedRow[fieldName] = value;
+    });
+    formattedData.push(formattedRow);
+  });
+
+  return formattedData;
+}
+
+function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, tableId) {
+  removeDuplicateRows(sheetName); // Remove duplicate rows first
+
+  const sheet = spreadsheet.getSheetByName(sheetName);
+  const data = sheet.getDataRange().getValues();
+
+  Logger.log(`Processing data from sheet: ${sheetName}`);
+
+  const rows = [];
+  const headers = data[0].map(header => header.replace(/\s+/g, '_')); // Convert headers to use underscores
+
+  const fieldMap = {
+    'Buy/Sell': 'Buy_Sell'
+  };
+
+  for (let i = 1; i < data.length; i++) {
+    const row = {};
+
+    for (let j = 0; j < headers.length; j++) {
+      let cellValue = data[i][j];
+      let fieldName = headers[j];
+
+      if (fieldMap[fieldName]) {
+        fieldName = fieldMap[fieldName];
+      }
+
+      // If the cell is a date object, format it as a string
+      if (Object.prototype.toString.call(cellValue) === '[object Date]') {
+        cellValue = Utilities.formatDate(cellValue, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+      } else if (fieldName.toLowerCase().includes('date')) {
+        // Attempt to format string dates
+        const date = new Date(cellValue);
+        if (!isNaN(date.getTime())) {
+          cellValue = Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+        } else {
+          Logger.log(`Invalid date detected in sheet ${sheetName}, row ${i + 1}, column ${headers[j]}, value: ${cellValue}`);
+          throw new Error(`Invalid date detected in sheet ${sheetName}, row ${i + 1}, column ${headers[j]}`);
+        }
+      }
+
+      // If the data is missing, insert null
+      row[fieldName] = cellValue === '' || cellValue === null ? null : cellValue;
+    }
+
+    rows.push(row);
+  }
+
+  Logger.log(`Prepared ${rows.length} rows for BigQuery (${sheetName})`);
+
+  // Fetch the table schema
+  const schema = fetchTableSchema(projectId, datasetId, tableId);
+
+  // Format data according to schema
+  const formattedRows = formatDataAccordingToSchema(rows, schema);
+
+  const job = {
+    configuration: {
+      load: {
+        destinationTable: {
+          projectId: projectId,
+          datasetId: datasetId,
+          tableId: tableId
+        },
+        writeDisposition: 'WRITE_TRUNCATE',
+        sourceFormat: 'NEWLINE_DELIMITED_JSON'
+      }
+    }
+  };
+
+  Logger.log(`Job configuration for ${sheetName}: ${JSON.stringify(job)}`);
+
+  const chunkSize = 1000; // Define chunk size
+  for (let start = 0; start < formattedRows.length; start += chunkSize) {
+    const chunk = formattedRows.slice(start, start + chunkSize);
+    const jsonLines = chunk.map(row => JSON.stringify(row)).join('\n');
+    const blob = Utilities.newBlob(jsonLines, 'application/json');
+    
+    let insertJob;
+    try {
+      insertJob = BigQuery.Jobs.insert(job, projectId, blob);
+    } catch (error) {
+      Logger.log(`Error inserting job for ${sheetName} chunk starting at ${start}: ${error.message}`);
+      throw error;
+    }
+
+    Logger.log(`Job status for ${sheetName} chunk starting at ${start}: ${insertJob.status.state}`);
+
+    const jobId = insertJob.jobReference.jobId;
+    let jobStatus = BigQuery.Jobs.get(projectId, jobId);
+    while (jobStatus.status.state === 'RUNNING') {
+      Logger.log(`Job status for ${sheetName} chunk starting at ${start}: ${jobStatus.status.state}`);
+      Utilities.sleep(1000); // Wait for 1 second before checking again
+      jobStatus = BigQuery.Jobs.get(projectId, jobId);
+    }
+
+    if (jobStatus.status.state === 'DONE') {
+      if (jobStatus.status.errorResult) {
+        Logger.log(`Error for ${sheetName} chunk starting at ${start}: ${jobStatus.status.errorResult.message}`);
+        Logger.log(`Error details for ${sheetName} chunk starting at ${start}: ${JSON.stringify(jobStatus.status.errors)}`);
+        throw new Error(`Job failed for ${sheetName} chunk starting at ${start}: ${jobStatus.status.errorResult.message}`);
+      } else {
+        const outputRows = jobStatus.statistics.load.outputRows;
+        Logger.log(`Job completed successfully for ${sheetName} chunk starting at ${start}. Number of records inserted: ${outputRows}`);
+      }
+    }
+  }
+}
+
+function pushToBigQuery() {
+  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
+  const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE'; // Replace with your actual spreadsheet ID
+
+  try {
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const sheetNames = spreadsheet.getSheets().map(sheet => sheet.getName());
+
+    const excludeSheets = ['Wallets', 'Sheet4', 'Transactions', 'ETH Prices'];
+
+    sheetNames.forEach(sheetName => {
+      if (!excludeSheets.includes(sheetName)) {
+        Logger.log(`Starting to process sheet: ${sheetName}`);
+        moveSheetToBigQuery(spreadsheet, sheetName, PROJECT_ID, DATASET_ID, sheetName.toLowerCase().replace(/\s+/g, '_'));
+        Logger.log(`Finished processing sheet: ${sheetName}`);
+      }
+    });
+
+  } catch (error) {
+    Logger.log('Error: ' + JSON.stringify(error));
+    throw new Error('Failed to push data to BigQuery: ' + JSON.stringify(error));
+  }
+}
+
+
+function authorize() {
+  const ui = SpreadsheetApp.getUi();
+  ui.alert('This is just to trigger the authorization flow.');
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('BigQuery')
+    .addItem('Push to BigQuery', 'pushToBigQuery')
+    .addItem('Authorize', 'authorize')
+    .addToUi();
+}
+
+function isValidEthereumAddress(address) {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
