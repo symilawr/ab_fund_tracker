@@ -1,5 +1,6 @@
-// config.gs
 function getEnvironmentVariable(key) {
   const scriptProperties = PropertiesService.getScriptProperties();
-  return scriptProperties.getProperty(key);
+  const value = scriptProperties.getProperty(key);
+  Logger.log('Retrieved environment variable: ' + key + ' = ' + value);
+  return value;
 }
