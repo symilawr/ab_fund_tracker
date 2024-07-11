@@ -177,42 +177,50 @@ function appendZapperAssetsToSheet(sheet, balanceData, walletAddress, createDate
   });
 }
 
-// Fetch ETH prices
+// Fetch crypto prices from various APIs and update Google Sheets
 function fetchETHPrices() {
-  const sheet = getOrCreateSheet('ETH Prices');
-  const latestTimestamp = fetchLatestTimestamps('eth_prices');
-  const fromTimestamp = latestTimestamp ? `&from=${latestTimestamp}` : '';
-  const apiUrl = `https://api.mobula.io/api/1/market/history?asset=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2&blockchain=ethereum${fromTimestamp}`;
+  const sheet = getOrCreateSheet('crypto_prices');
+  const apiUrls = [
+    'https://api.diadata.org/v1/assetQuotation/Solana/0x0000000000000000000000000000000000000000',
+    'https://api.diadata.org/v1/assetQuotation/Dogechain/0x0000000000000000000000000000000000000000',
+    'https://api.diadata.org/v1/assetQuotation/Optimism/0x4200000000000000000000000000000000000042',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0x0000000000000000000000000000000000000000',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72',
+    'https://api.diadata.org/v1/assetQuotation/Evmos/0xFA3C22C069B9556A4B2f7EcE1Ee3B467909f4864',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0x767FE9EDC9E0dF98E07454847909b5E959D7ca0E',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0xae78736Cd615f374D3085123A210448E74Fc6393',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0xD33526068D116cE69F19A9ee46F0bd304F21A51f',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',
+    'https://api.diadata.org/v1/assetQuotation/Optimism/0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0x2d94AA3e47d9D5024503Ca8491fcE9A2fB4DA198',
+    'https://api.diadata.org/v1/assetQuotation/Terra/0x0000000000000000000000000000000000000000',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0xF57e7e7C23978C3cAEC3C3548E3D615c346e79fF'
+  ];
 
   const options = {
     'method': 'get',
     'muteHttpExceptions': true
   };
 
-  try {
-    const response = UrlFetchApp.fetch(apiUrl, options);
-    if (response.getResponseCode() !== 200) {
-      throw new Error(`Error: ${response.getResponseCode()} - ${response.getContentText()}`);
+  apiUrls.forEach(apiUrl => {
+    try {
+      const response = UrlFetchApp.fetch(apiUrl, options);
+      if (response.getResponseCode() !== 200) {
+        throw new Error(`Error: ${response.getResponseCode()} - ${response.getContentText()}`);
+      }
+      const data = JSON.parse(response.getContentText());
+      const priceData = {
+        token: data.Symbol,
+        price: data.Price,
+        timestamp: new Date(data.Time)
+      };
+      sheet.appendRow([priceData.token, priceData.price, priceData.timestamp]);
+    } catch (e) {
+      console.error(`Exception: ${e.message}`);
     }
-    const data = JSON.parse(response.getContentText());
+  });
 
-    // Clear the sheet and set headers
-    clearAndSetHeaders(sheet, ['Timestamp', 'Price']);
-
-    // Populate the sheet with data
-    if (data && data.data && data.data.price_history && data.data.price_history.length > 0) {
-      data.data.price_history.forEach(priceData => {
-        sheet.appendRow([
-          new Date(priceData[0]),
-          priceData[1]
-        ]);
-      });
-    } else {
-      console.log('No price data found.');
-    }
-  } catch (e) {
-    console.error(`Exception: ${e.message}`);
-  }
+  console.log('Prices fetched and updated successfully.');
 }
 
 // Move sheet data to BigQuery
@@ -334,7 +342,7 @@ function pushToBigQuery() {
     const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
     const sheetNames = spreadsheet.getSheets().map(sheet => sheet.getName());
 
-    const excludeSheets = ['Wallets', 'Sheet4', 'Transactions', 'ETH Prices'];
+    const excludeSheets = ['Wallets', 'Transactions'];
 
     sheetNames.forEach(sheetName => {
       if (!excludeSheets.includes(sheetName)) {
