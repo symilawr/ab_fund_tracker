@@ -810,7 +810,7 @@ function mapAndTransferTransactions() {
   // Create a map for Wallet Addresses to Wallet Names
   var walletMap = {};
   for (var i = 1; i < walletsData.length; i++) {
-    walletMap[walletsData[i][1]] = walletsData[i][0]; // Assuming Wallet Address is column B (index 1) and Wallet Name is column A (index 0)
+    walletMap[walletsData[i][0].toLowerCase()] = walletsData[i][1]; // Assuming Wallet Address is column A (index 0) and Wallet Name is column B (index 1)
   }
 
   // Process each transaction and add to Trade Log
@@ -818,7 +818,6 @@ function mapAndTransferTransactions() {
     var transaction = transactionsData[i];
 
     // Assuming Transactions columns: Wallet_Address, Timestamp, Asset_Name, Asset_Symbol, Asset_Contract, Asset_Logo, Type, Method_ID, Hash, Blockchain, Amount, Amount_USD, To, From, Block_Number, Tx_Cost, Create_Date
-    var walletAddress = transaction[0];
     var timestamp = transaction[1];
     Logger.log('Raw timestamp: ' + timestamp);
 
@@ -834,7 +833,10 @@ function mapAndTransferTransactions() {
     var amount = transaction[10];
     var amountUSD = transaction[11];
 
-    var walletName = walletMap[walletAddress] || "Unknown Wallet";
+    // Determine the correct wallet address to use for lookup
+    var lookupAddress = type.toLowerCase() === "buy" ? transaction[12] : transaction[13];
+    var walletName = walletMap[lookupAddress.toLowerCase()] || "Unknown Wallet";
+
     var unitPrice = amountUSD / amount;
     var ethPrice = getEthPriceClosestToTimestamp(parsedDate);
     var ethAmount = amountUSD / ethPrice;
@@ -885,5 +887,3 @@ function getEthPriceClosestToTimestamp(date) {
     return null; // Handle no result found
   }
 }
-
-
