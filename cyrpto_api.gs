@@ -22,7 +22,6 @@ function runAllDataFetchFunctions() {
 }
 
 
-// Fetch Mobula transaction data
 function fetchMobulaTransactionData(createDate) {
   const API_KEY = getEnvironmentVariable('MOBULA_API_KEY');
   const walletSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Wallets');
@@ -33,6 +32,8 @@ function fetchMobulaTransactionData(createDate) {
   if (!createDate) {
     createDate = new Date();
   }
+
+  const timeout = 5 * 60 * 1000; // Setting timeout to 5 minutes
 
   // Clear existing data and set headers
   clearAndSetHeaders(sheet, [
@@ -177,10 +178,60 @@ function appendZapperAssetsToSheet(sheet, balanceData, walletAddress, createDate
   });
 }
 
-// Fetch ETH prices
+// Fetch crypto prices from various APIs and update Google Sheets
+function fetchCryptoPrices() {
+  const sheet = getOrCreateSheet('crypto_prices');
+  const apiUrls = [
+    'https://api.diadata.org/v1/assetQuotation/Solana/0x0000000000000000000000000000000000000000',
+    'https://api.diadata.org/v1/assetQuotation/Dogechain/0x0000000000000000000000000000000000000000',
+    'https://api.diadata.org/v1/assetQuotation/Optimism/0x4200000000000000000000000000000000000042',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0x0000000000000000000000000000000000000000',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72',
+    'https://api.diadata.org/v1/assetQuotation/Evmos/0xFA3C22C069B9556A4B2f7EcE1Ee3B467909f4864',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0x767FE9EDC9E0dF98E07454847909b5E959D7ca0E',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0xae78736Cd615f374D3085123A210448E74Fc6393',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0xD33526068D116cE69F19A9ee46F0bd304F21A51f',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',
+    'https://api.diadata.org/v1/assetQuotation/Optimism/0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0x2d94AA3e47d9D5024503Ca8491fcE9A2fB4DA198',
+    'https://api.diadata.org/v1/assetQuotation/Terra/0x0000000000000000000000000000000000000000',
+    'https://api.diadata.org/v1/assetQuotation/Ethereum/0xF57e7e7C23978C3cAEC3C3548E3D615c346e79fF'
+  ];
+
+  const options = {
+    'method': 'get',
+    'muteHttpExceptions': true
+  };
+
+  // Clear the sheet if it has existing data
+  clearAndSetHeaders(sheet, ['Token', 'Price', 'Timestamp'])
+
+  apiUrls.forEach(apiUrl => {
+    try {
+      const response = UrlFetchApp.fetch(apiUrl, options);
+      if (response.getResponseCode() !== 200) {
+        throw new Error(`Error: ${response.getResponseCode()} - ${response.getContentText()}`);
+      }
+      const data = JSON.parse(response.getContentText());
+      const priceData = {
+        token: data.Symbol,
+        price: data.Price,
+        timestamp: new Date(data.Time)
+      };
+      sheet.appendRow([priceData.token, priceData.price, priceData.timestamp]);
+    } catch (e) {
+      console.error(`Exception: ${e.message}`);
+    }
+  });
+
+  console.log('Prices fetched and updated successfully.');
+}
+
 function fetchETHPrices() {
-  const sheet = getOrCreateSheet('ETH Prices');
-  const latestTimestamp = fetchLatestTimestamps('eth_prices');
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("crypto_prices") ||
+                SpreadsheetApp.getActiveSpreadsheet().insertSheet("crypto_prices");
+
+  const latestTimestamp = fetchLatestTimestamps('crypto_prices');
   const fromTimestamp = latestTimestamp ? `&from=${latestTimestamp}` : '';
   const apiUrl = `https://api.mobula.io/api/1/market/history?asset=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2&blockchain=ethereum${fromTimestamp}`;
 
@@ -196,24 +247,27 @@ function fetchETHPrices() {
     }
     const data = JSON.parse(response.getContentText());
 
-    // Clear the sheet and set headers
-    clearAndSetHeaders(sheet, ['Timestamp', 'Price']);
+    // Clear the sheet if it has existing data
+    clearAndSetHeaders(sheet, ['Token', 'Price', 'Timestamp'])
 
     // Populate the sheet with data
     if (data && data.data && data.data.price_history && data.data.price_history.length > 0) {
       data.data.price_history.forEach(priceData => {
         sheet.appendRow([
-          new Date(priceData[0]),
-          priceData[1]
+          'ETH',
+          priceData[1],
+          new Date(priceData[0])
         ]);
       });
     } else {
-      console.log('No price data found.');
+      Logger.log("No price data found.");
     }
+
   } catch (e) {
-    console.error(`Exception: ${e.message}`);
+    Logger.log(`Exception: ${e.message}`);
   }
 }
+
 
 // Move sheet data to BigQuery
 function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, tableId) {
@@ -334,7 +388,7 @@ function pushToBigQuery() {
     const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
     const sheetNames = spreadsheet.getSheets().map(sheet => sheet.getName());
 
-    const excludeSheets = ['Wallets', 'Sheet4', 'Transactions', 'ETH Prices'];
+    const excludeSheets = ['Wallets', 'Transactions', 'Trade Log'];
 
     sheetNames.forEach(sheetName => {
       if (!excludeSheets.includes(sheetName)) {
@@ -421,6 +475,7 @@ function fetchLatestTimestamps(tableId) {
     return null;
   }
 }
+
 
 // Function to remove duplicate rows from a specified sheet
 function removeDuplicateRows(sheetName) {
@@ -729,3 +784,106 @@ function clearAndSetHeaders(sheet, headers) {
   sheet.appendRow(headers);
 }
 
+const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+const DATASET_ID = getEnvironmentVariable('DATASET_ID');
+const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE'; // Replace with your actual spreadsheet ID
+
+function getEnvironmentVariable(name) {
+  // Function to get environment variable value (you need to implement this or set it accordingly)
+  // For example, you can set the variables in the script properties
+  return PropertiesService.getScriptProperties().getProperty(name);
+}
+
+function mapAndTransferTransactions() {
+  // Open the Google Sheets document
+  var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  
+  // Define the sheets
+  var transactionsSheet = spreadsheet.getSheetByName("Transactions");
+  var tradeLogSheet = spreadsheet.getSheetByName("Trade Log");
+  var walletsSheet = spreadsheet.getSheetByName("Wallets");
+
+  // Get the data from the Transactions sheet
+  var transactionsData = transactionsSheet.getDataRange().getValues();
+  var walletsData = walletsSheet.getDataRange().getValues();
+  
+  // Create a map for Wallet Addresses to Wallet Names
+  var walletMap = {};
+  for (var i = 1; i < walletsData.length; i++) {
+    walletMap[walletsData[i][0].toLowerCase()] = walletsData[i][1]; // Assuming Wallet Address is column A (index 0) and Wallet Name is column B (index 1)
+  }
+
+  // Process each transaction and add to Trade Log
+  for (var i = 1; i < transactionsData.length; i++) { // Start from 1 to skip headers
+    var transaction = transactionsData[i];
+
+    // Assuming Transactions columns: Wallet_Address, Timestamp, Asset_Name, Asset_Symbol, Asset_Contract, Asset_Logo, Type, Method_ID, Hash, Blockchain, Amount, Amount_USD, To, From, Block_Number, Tx_Cost, Create_Date
+    var timestamp = transaction[1];
+    Logger.log('Raw timestamp: ' + timestamp);
+
+    var parsedDate = new Date(timestamp);
+    if (isNaN(parsedDate.getTime())) {
+      Logger.log('Invalid timestamp format: ' + timestamp);
+      continue; // Skip this transaction
+    }
+
+    var type = transaction[6];
+    var hash = transaction[8];
+    var assetSymbol = transaction[3];
+    var amount = transaction[10];
+    var amountUSD = transaction[11];
+
+    // Determine the correct wallet address to use for lookup
+    var lookupAddress = type.toLowerCase() === "buy" ? transaction[12] : transaction[13];
+    var walletName = walletMap[lookupAddress.toLowerCase()] || "Unknown Wallet";
+
+    var unitPrice = amountUSD / amount;
+    var ethPrice = getEthPriceClosestToTimestamp(parsedDate);
+    var ethAmount = amountUSD / ethPrice;
+    var unitToEthPrice = unitPrice / ethPrice;
+    var usdBuySell = type.toLowerCase() === "sell" ? -amountUSD : amountUSD;
+    var unitBuySell = type.toLowerCase() === "sell" ? -amount : amount;
+
+    // Append the data to Trade Log
+    tradeLogSheet.appendRow([
+      timestamp,        // tl.Date
+      type,             // tl.Buy_Sell
+      walletName,       // tl.Wallet
+      hash,             // tl.TXN_Hash
+      "",               // tl.Notes
+      assetSymbol,      // tl.Currency
+      amount,           // tl.Unit_Amount
+      amountUSD,        // tl.USD_Value
+      amountUSD,        // tl.ETH_Value
+      ethAmount,        // tl.Eth_Amount
+      unitPrice,        // tl.Unit_Price
+      ethPrice,         // tl.Eth_Price
+      "Trade",          // tl.Classification
+      unitToEthPrice,   // tl.Unit_to_ETH_Price
+      usdBuySell,       // tl.USD_Buy_Sell
+      unitBuySell       // tl.Unit_Buy_Sell
+    ]);
+  }
+}
+
+function getEthPriceClosestToTimestamp(date) {
+  if (isNaN(date.getTime())) {
+    throw new RangeError('Invalid time value');
+  }
+
+  // Format the date as a string that BigQuery can interpret
+  var formattedDate = date.toISOString().replace('T', ' ').replace('Z', '');
+
+  // Query BigQuery to get the closest ETH price
+  var query = `SELECT Price FROM \`${PROJECT_ID}.${DATASET_ID}.crypto_prices\`
+               WHERE Token = 'ETH' 
+               ORDER BY ABS(TIMESTAMP_DIFF(Timestamp, TIMESTAMP '${formattedDate}', SECOND)) 
+               LIMIT 1`;
+
+  var results = BigQuery.Jobs.query({query: query, useLegacySql: false}, PROJECT_ID);
+  if (results && results.jobComplete && results.rows.length > 0) {
+    return parseFloat(results.rows[0].f[0].v);
+  } else {
+    return null; // Handle no result found
+  }
+}
