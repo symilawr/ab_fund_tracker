@@ -2,6 +2,8 @@
 
 This script automates the process of fetching wallet data, transaction data, and other cryptocurrency-related data from various APIs and pushing it to Google BigQuery. The script is designed to run within a Google Sheets environment.
 
+![My Image](images\ab fund data flow.png)
+
 Open source Fund Administration Software for tracking portfolios with real-time pricing data and analytics.
 
 ## Functions Overview
