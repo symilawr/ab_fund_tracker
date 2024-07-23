@@ -2,7 +2,17 @@
 
 This script automates the process of fetching wallet data, transaction data, and other cryptocurrency-related data from various APIs and pushing it to Google BigQuery. The script is designed to run within a Google Sheets environment.
 
-![My Image](images\ab fund data flow.png)
+### Workflow:
+1. User inputs crypto wallet address in Google Sheet.
+2. User runs app script from Google Sheets for pulling API (Zapper, Etherscan) data that includes:
+    - Crypto prices
+    - Wallet data
+    - Wallet asset data
+    - Transactions
+3. User runs app script in Google Sheet to push data to Google BigQuery.
+4. Looker charts and diagrams are built from the data stored in Google BigQuery.
+
+![ab fund data flow](https://github.com/user-attachments/assets/59cc080b-9dae-4631-98e4-d1d0ec8b3f34)
 
 Open source Fund Administration Software for tracking portfolios with real-time pricing data and analytics.
 
