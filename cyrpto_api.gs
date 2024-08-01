@@ -9,6 +9,33 @@ function runAllDataFetchFunctions() {
   // Flatten and filter non-empty values
   walletAddresses = walletAddresses.flat().filter(String);
 
+  const zapperWalletAssetsSheet = getOrCreateSheet('Zapper_Wallet_Assets');
+  const zapperWalletDataSheet = getOrCreateSheet('Zapper_Wallet_Data');
+  const walletDataSheet = getOrCreateSheet('Wallet_Data');
+  const walletAssetsSheet = getOrCreateSheet('Wallet_Assets');
+
+  clearAndSetHeaders(zapperWalletAssetsSheet, [
+    'address', 'network', 'updatedAt', 'token_id', 'token_address', 'token_name', 'token_symbol', 'token_decimals',
+    'token_coingeckoId', 'token_updatedAt', 'token_createdAt', 'token_price', 'token_networkId', 'token_marketCap',
+    'token_priceUpdatedAt', 'token_balance', 'token_balanceUSD', 'token_balanceRaw', 'Create_Date'
+  ]);
+
+  clearAndSetHeaders(zapperWalletDataSheet, [
+    'Wallet_Address', 'Updated_At', 'Balance_USD', 'Asset_Count', 'Create_Date'
+  ]);
+
+  clearAndSetHeaders(walletDataSheet, [
+    'Wallet', 'Total_Wallet_Balance', 'Total_Realized_PnL', 'Total_Unrealized_PnL', 'Assets_Count', 'PnL_24h_Realized',
+    'PnL_24h_Unrealized', 'PnL_7d_Realized', 'PnL_7d_Unrealized', 'PnL_30d_Realized', 'PnL_30d_Unrealized',
+    'PnL_1y_Realized', 'PnL_1y_Unrealized', 'Create_Date'
+  ]);
+
+  clearAndSetHeaders(walletAssetsSheet, [
+    'Wallet', 'Asset_Name', 'Asset_Symbol', 'Asset_ID', 'Realized_PnL', 'Unrealized_PnL', 'Allocation', 'Price',
+    'Price_Bought', 'Price_Change_24h', 'Price_Change_1h', 'Total_Invested', 'Min_Buy_Price', 'Max_Buy_Price',
+    'Estimated_Balance', 'Token_Balance', 'Create_Date'
+  ]);
+
   walletAddresses.forEach(walletAddress => {
     if (isValidEthereumAddress(walletAddress)) {
       console.log(`${walletAddress} is a valid ETH address`);
@@ -20,7 +47,6 @@ function runAllDataFetchFunctions() {
     }
   });
 }
-
 
 function fetchMobulaTransactionData(createDate) {
   const API_KEY = getEnvironmentVariable('MOBULA_API_KEY');
@@ -247,9 +273,6 @@ function fetchETHPrices() {
     }
     const data = JSON.parse(response.getContentText());
 
-    // Clear the sheet if it has existing data
-    clearAndSetHeaders(sheet, ['Token', 'Price', 'Timestamp'])
-
     // Populate the sheet with data
     if (data && data.data && data.data.price_history && data.data.price_history.length > 0) {
       data.data.price_history.forEach(priceData => {
@@ -268,6 +291,10 @@ function fetchETHPrices() {
   }
 }
 
+function updatePrices(){
+  fetchCryptoPrices();
+  fetchETHPrices();
+}
 
 // Move sheet data to BigQuery
 function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, tableId) {
@@ -379,16 +406,16 @@ function moveSheetToBigQuery(spreadsheet, sheetName, projectId, datasetId, table
 }
 
 // Push all sheets to BigQuery
-function pushToBigQuery() {
+function pushAllToBigQuery() {
   const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
   const DATASET_ID = getEnvironmentVariable('DATASET_ID');
-  const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE'; // Replace with your actual spreadsheet ID
+  const SPREADSHEET_ID = getEnvironmentVariable('SPREADSHEET_ID'); // Replace with your actual spreadsheet ID
 
   try {
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheetNames = spreadsheet.getSheets().map(sheet => sheet.getName());
 
-    const excludeSheets = ['Wallets', 'Transactions', 'Trade Log'];
+    const excludeSheets = ['Wallets',];
 
     sheetNames.forEach(sheetName => {
       if (!excludeSheets.includes(sheetName)) {
@@ -404,6 +431,111 @@ function pushToBigQuery() {
   }
 }
 
+// Push price sheets to BigQuery
+function pushPricesToBigQuery() {
+  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
+  const SPREADSHEET_ID = getEnvironmentVariable('SPREADSHEET_ID'); // Replace with your actual spreadsheet ID
+
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheetNames = spreadsheet.getSheets().map(sheet => sheet.getName());
+
+    const includeSheets = ['crypto_prices'];
+
+    sheetNames.forEach(sheetName => {
+      if (includeSheets.includes(sheetName)) {
+        console.log(`Starting to process sheet: ${sheetName}`);
+        moveSheetToBigQuery(spreadsheet, sheetName, PROJECT_ID, DATASET_ID, sheetName.toLowerCase().replace(/\s+/g, '_'));
+        console.log(`Finished processing sheet: ${sheetName}`);
+      }
+    });
+
+  } catch (error) {
+    console.error('Error: ' + JSON.stringify(error));
+    throw new Error('Failed to push data to BigQuery: ' + JSON.stringify(error));
+  }
+}
+
+// Push all wallet sheets to BigQuery
+function pushWalletDataToBigQuery() {
+  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
+  const SPREADSHEET_ID = getEnvironmentVariable('SPREADSHEET_ID');
+
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheetNames = spreadsheet.getSheets().map(sheet => sheet.getName());
+
+    const includeSheets = ['Wallet_Assets', 'Wallet_Data', 'Zapper_Wallet_Assets', 'Zapper_Wallet_Data'];
+
+    sheetNames.forEach(sheetName => {
+      if (includeSheets.includes(sheetName)) {
+        console.log(`Starting to process sheet: ${sheetName}`);
+        moveSheetToBigQuery(spreadsheet, sheetName, PROJECT_ID, DATASET_ID, sheetName.toLowerCase().replace(/\s+/g, '_'));
+        console.log(`Finished processing sheet: ${sheetName}`);
+      }
+    });
+
+  } catch (error) {
+    console.error('Error: ' + JSON.stringify(error));
+    throw new Error('Failed to push data to BigQuery: ' + JSON.stringify(error));
+  }
+}
+
+// Push all Transactions to BigQuery
+function pushTransactionsToBigQuery() {
+  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
+  const SPREADSHEET_ID = getEnvironmentVariable('SPREADSHEET_ID'); // Replace with your actual spreadsheet ID
+
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheetNames = spreadsheet.getSheets().map(sheet => sheet.getName());
+
+    const includeSheets = ['Transactions'];
+
+    sheetNames.forEach(sheetName => {
+      if (includeSheets.includes(sheetName)) {
+        console.log(`Starting to process sheet: ${sheetName}`);
+        moveSheetToBigQuery(spreadsheet, sheetName, PROJECT_ID, DATASET_ID, sheetName.toLowerCase().replace(/\s+/g, '_'));
+        console.log(`Finished processing sheet: ${sheetName}`);
+      }
+    });
+
+  } catch (error) {
+    console.error('Error: ' + JSON.stringify(error));
+    throw new Error('Failed to push data to BigQuery: ' + JSON.stringify(error));
+  }
+}
+
+// Push all Trade Log to BigQuery
+function pushTradeLogToBigQuery() {
+  const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
+  const DATASET_ID = getEnvironmentVariable('DATASET_ID');
+  const SPREADSHEET_ID = getEnvironmentVariable('SPREADSHEET_ID'); // Replace with your actual spreadsheet ID
+
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheetNames = spreadsheet.getSheets().map(sheet => sheet.getName());
+
+    const includeSheets = ['Trade Log'];
+
+    sheetNames.forEach(sheetName => {
+      if (includeSheets.includes(sheetName)) {
+        console.log(`Starting to process sheet: ${sheetName}`);
+        moveSheetToBigQuery(spreadsheet, sheetName, PROJECT_ID, DATASET_ID, sheetName.toLowerCase().replace(/\s+/g, '_'));
+        console.log(`Finished processing sheet: ${sheetName}`);
+      }
+    });
+
+  } catch (error) {
+    console.error('Error: ' + JSON.stringify(error));
+    throw new Error('Failed to push data to BigQuery: ' + JSON.stringify(error));
+  }
+}
+
+
 // Utility functions
 // Utility function to trigger authorization flow
 function authorize() {
@@ -414,9 +546,18 @@ function authorize() {
 // Function to add custom menu items to the Google Sheets UI
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('BigQuery')
-    .addItem('Push to BigQuery', 'pushToBigQuery')
+    .addItem('Push All Sheets to BigQuery', 'pushAllToBigQuery')
+    .addItem('Push Prices to BigQuery', 'pushPricesToBigQuery')
+    .addItem('Push Wallet Data & Assets to BigQuery', 'pushWalletDataToBigQuery')
+    .addItem('Push to Transactions BigQuery', 'pushTransactionsToBigQuery')
+    .addItem('Push to Tade Log BigQuery', 'pushTradeLogToBigQuery')
     .addItem('Authorize', 'authorize')
+    .addToUi();
+  SpreadsheetApp.getUi().createMenu('Crypto Data')
     .addItem('Fetch Data', 'runAllDataFetchFunctions')
+    .addItem('Update Prices', 'updatePrices')
+    .addItem('Fetch Transactions', 'fetchMobulaTransactionData')
+    .addItem('Move Transactions to Trade Log', 'mapAndTransferTransactions')
     .addToUi();
 }
 
@@ -479,10 +620,10 @@ function fetchLatestTimestamps(tableId) {
 
 // Function to remove duplicate rows from a specified sheet
 function removeDuplicateRows(sheetName) {
-  const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE';
+  const SPREADSHEET_ID = getEnvironmentVariable('SPREADSHEET_ID');
 
   try {
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = spreadsheet.getSheetByName(sheetName);
     const data = sheet.getDataRange().getValues();
 
@@ -786,7 +927,7 @@ function clearAndSetHeaders(sheet, headers) {
 
 const PROJECT_ID = getEnvironmentVariable('PROJECT_ID');
 const DATASET_ID = getEnvironmentVariable('DATASET_ID');
-const spreadsheetId = '1nquhw_n2hIp6uRYcIncygoTUp9fHD2UzYyoWNkaA4eE'; // Replace with your actual spreadsheet ID
+const SPREADSHEET_ID = getEnvironmentVariable('SPREADSHEET_ID'); // Replace with your actual spreadsheet ID
 
 function getEnvironmentVariable(name) {
   // Function to get environment variable value (you need to implement this or set it accordingly)
@@ -796,7 +937,7 @@ function getEnvironmentVariable(name) {
 
 function mapAndTransferTransactions() {
   // Open the Google Sheets document
-  var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
   
   // Define the sheets
   var transactionsSheet = spreadsheet.getSheetByName("Transactions");
